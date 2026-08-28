@@ -1,0 +1,5 @@
+.vagrant
+.settings/
+.launches/
+Debug/
+*.swp
