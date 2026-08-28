@@ -131,6 +131,5 @@ EOF
   # Install dependencies
   config.vm.provision "shell", name: "install-dependencies", path: "install-dependencies.sh"
   # Copy CCS templates
-  config.vm.provision "file", source: "template", destination: "/home/vagrant/workspace_v12/template"
-  config.vm.provision "file", source: "driverlib_template", destination: "/home/vagrant/workspace_v12/driverlib_template"
+  config.vm.provision "file", source: "workspace_v12", destination: "/home/vagrant/workspace_v12"
 end
