@@ -3,3 +3,4 @@
 .launches/
 Debug/
 *.swp
+tmp/

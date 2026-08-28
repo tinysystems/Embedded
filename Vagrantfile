@@ -1,107 +1,136 @@
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
-
-# All Vagrant configuration is done below. The "2" in Vagrant.configure
-# configures the configuration version (we support older styles for
-# backwards compatibility). Please don't change it unless you know what
-# you're doing.
 Vagrant.configure("2") do |config|
-  # The most common configuration options are documented and commented below.
-  # For a complete reference, please see the online documentation at
-  # https://docs.vagrantup.com.
-
-  # Every Vagrant development environment requires a box. You can search for
-  # boxes at https://vagrantcloud.com/search.
   config.vm.box = "bento/ubuntu-24.04"
-  config.vm.box_version = "202510.26.0"
+  config.vm.hostname = "desktop-playground"
 
-  
+  config.vm.provider :virtualbox do |v|
+    v.gui = true
+    v.cpus = 2
+    v.memory = 4096
+
+    # Graphics optimizations
+    v.customize ["modifyvm", :id, "--vram=128"]
+    v.customize ["modifyvm", :id, "--accelerate-3d=on"]
+    v.customize ["setextradata", :id, "GUI/LastGuestSizeHint", "1280,720"]
+
+    # Convenience features
+    v.customize ["modifyvm", :id, "--clipboard", "bidirectional"]
+    v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"]
+
+    # Network optimization
+    v.default_nic_type = "virtio"
+  end
+
+  # Package caching for faster rebuilds
+  cache_dir = File.expand_path("tmp/vagrant-cache")
+  FileUtils.mkdir_p(cache_dir) unless File.directory?(cache_dir)
+
+  config.vm.synced_folder File.join(cache_dir, "apt"), "/var/cache/apt/archives",
+    type: "virtualbox", create: true, owner: "root", group: "root",
+    mount_options: ["dmode=755", "fmode=644"]
+
+  config.vm.provision :shell, inline: <<-SHELL
+    set -euo pipefail
+
+    # Fix DNS first
+    systemctl stop systemd-resolved || true
+    systemctl disable systemd-resolved || true
+    systemctl mask systemd-resolved || true
+    chattr -i /etc/resolv.conf 2>/dev/null || true
+    rm -f /etc/resolv.conf
+    printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf
+    chattr +i /etc/resolv.conf
+
+    # Set environment variables
+    echo 'export DISPLAY=:0' >> /etc/environment
+    echo 'export XDG_CURRENT_DESKTOP=GNOME' >> /etc/environment
+    echo 'export XDG_SESSION_TYPE=x11' >> /etc/environment
+
+    # Set LightDM as default BEFORE installing packages
+    mkdir -p /etc/X11
+    echo '/usr/sbin/lightdm' > /etc/X11/default-display-manager
+
+    # Update packages
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+
+    # Install individual desktop packages (maximum control, no bloat)
+    apt-get install -y -qq \
+      xorg \
+      gnome-session \
+      gnome-shell \
+      gnome-terminal \
+      nautilus \
+      gnome-settings-daemon \
+      gnome-control-center \
+      lightdm \
+      lightdm-gtk-greeter \
+      ubuntu-session \
+      xdg-desktop-portal-gnome
+
+    # CRITICAL: Stop GDM3 immediately after installation
+    # It auto-starts when installed and will steal the display
+    systemctl stop gdm3 || true
+    systemctl disable gdm3 || true
+    systemctl mask gdm3 || true
+
+    # Verify session file exists before configuring auto-login
+    if [ ! -f /usr/share/xsessions/ubuntu.desktop ]; then
+        echo "❌ Ubuntu session file not found!"
+        ls -la /usr/share/xsessions/
+        exit 1
+    fi
+
+    # Configure auto-login
+    usermod -a -G nopasswdlogin vagrant
+
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat > /etc/lightdm/lightdm.conf.d/50-autologin.conf << 'EOF'
+[Seat:*]
+autologin-user=vagrant
+autologin-user-timeout=0
+autologin-session=ubuntu
+greeter-show-manual-login=false
+allow-guest=false
+EOF
+
+    # Explicitly create the display-manager.service symlink
+    ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+
+    # Enable LightDM
+    systemctl enable lightdm
+
+    # Verify the symlink was created
+    if [ ! -L /etc/systemd/system/display-manager.service ]; then
+        echo "❌ Failed to create display-manager.service symlink"
+        exit 1
+    fi
+
+    # Start LightDM immediately
+    systemctl start lightdm
+
+    # Verify it started successfully
+    if ! systemctl is-active --quiet lightdm; then
+        echo "❌ LightDM failed to start"
+        journalctl -u lightdm -n 20
+        exit 1
+    fi
+
+    # Mark essential packages as manually installed (after installation)
+    apt-mark manual gnome-session gnome-session-bin gnome-session-common lightdm lightdm-gtk-greeter ubuntu-session xdg-desktop-portal-gnome
+
+    # Verify it worked
+    protected_count=$(apt-mark showmanual | grep -E "(gnome-session|ubuntu-session|xdg-desktop-portal|lightdm)" | wc -l)
+    if [ "$protected_count" -lt 7 ]; then
+        echo "❌ MARKING FAILED! Only $protected_count/7 packages marked as manual"
+        exit 1
+    fi
+
+    echo "✅ Desktop environment ready!"
+  SHELL
+
   # Install dependencies
   config.vm.provision "shell", name: "install-dependencies", path: "install-dependencies.sh"
-
   # Copy CCS templates
   config.vm.provision "file", source: "template", destination: "/home/vagrant/workspace_v12/template"
   config.vm.provision "file", source: "driverlib_template", destination: "/home/vagrant/workspace_v12/driverlib_template"
-
-  config.vm.provider "virtualbox" do |vb|
-    vb.gui = true
-    vb.memory = "4096"
-    vb.cpus = 4
-    vb.customize ["modifyvm", :id, "--vram", "128"]
-    vb.customize ["modifyvm", :id, "--usb", "on"]
-    vb.customize ["modifyvm", :id, "--usbehci", "on"]
-    vb.customize ["modifyvm", :id, "--usbxhci", "off"]
-  end
-
-  config.vm.provider "virtualbox" do |vb|
-    vb.customize ["usbfilter", "add", "0",
-        "--target", :id,
-        "--name", "Texas Instruments, Inc. CC1352R1 Launchpad",
-        "--product", "XDS110",
-        "--vendorid", "0x0451",
-        "--productid", "0xbef3",
-        "--port", "3",
-    ]
-  end
-
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # NOTE: This will enable public access to the opened port
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
-
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine and only allow access
-  # via 127.0.0.1 to disable public access
-  # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
-
-  # Create a private network, which allows host-only access to the machine
-  # using a specific IP.
-  # config.vm.network "private_network", ip: "192.168.33.10"
-
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  # config.vm.network "public_network"
-
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  # config.vm.synced_folder "../data", "/vagrant_data"
-
-  # Disable the default share of the current code directory. Doing this
-  # provides improved isolation between the vagrant box and your host
-  # by making sure your Vagrantfile isn't accessible to the vagrant box.
-  # If you use this you may want to enable additional shared subfolders as
-  # shown above.
-  # config.vm.synced_folder ".", "/vagrant", disabled: true
-
-  # Provider-specific configuration so you can fine-tune various
-  # backing providers for Vagrant. These expose provider-specific options.
-  # Example for VirtualBox:
-  #
-  # config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-  #   vb.memory = "1024"
-  # end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
-
-  # Enable provisioning with a shell script. Additional provisioners such as
-  # Ansible, Chef, Docker, Puppet and Salt are also available. Please see the
-  # documentation for more information about their specific syntax and use.
-  # config.vm.provision "shell", inline: <<-SHELL
-  #   apt-get update
-  #   apt-get install -y apache2
-  # SHELL
 end
