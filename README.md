@@ -25,17 +25,14 @@ name: vagrant pass: vagrant
 
 RUN with OVA file in virtualbox:
 ```bash
-git lfs pull
 cat embedded.ova.part* > embedded.ova
+```
+Option 1:
+```bash
 VBoxManage import embedded.ova
 ```
-
-Or run virtualbox:
+Option 2:
 1. File -> Import Appliance (Ctrl + I)
-2.
-```bash
-cat embedded.ova.part* > embedded.ova
-```
-3. Locate embedded.ova and finish
+2. Locate embedded.ova and finish
 
 Then run virtualbox and start Embedded_default VM.
