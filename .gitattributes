@@ -1,0 +1,7 @@
+embedded.ova.partaa filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partab filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partac filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partad filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partae filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partaf filter=lfs diff=lfs merge=lfs -text
+embedded.ova.partag filter=lfs diff=lfs merge=lfs -text
