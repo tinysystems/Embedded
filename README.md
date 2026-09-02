@@ -29,3 +29,13 @@ git lfs pull
 cat embedded.ova.part* > embedded.ova
 VBoxManage import embedded.ova
 ```
+
+Or run virtualbox:
+1. File -> Import Appliance (Ctrl + I)
+2.
+```bash
+cat embedded.ova.part* > embedded.ova
+```
+3. Locate embedded.ova and finish
+
+Then run virtualbox and start Embedded_default VM.
