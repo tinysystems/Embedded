@@ -22,3 +22,10 @@ i needed:
 sudo rmmod kvm_intel (or kvm_amd?)
 right ctrl key to close virtualbox
 name: vagrant pass: vagrant
+
+RUN with OVA file in virtualbox:
+```bash
+git lfs pull
+cat embedded.ova.part* > embedded.ova
+VBoxManage import embedded.ova
+```
